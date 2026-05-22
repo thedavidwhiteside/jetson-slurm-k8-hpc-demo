@@ -18,7 +18,8 @@
       --dry-run=client -o yaml | kubectl apply -f -
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
-  changed_when: true
+  register: tls_secret_result
+  changed_when: "'created' in tls_secret_result.stdout or 'configured' in tls_secret_result.stdout"
 
 - name: Apply TLS proxy
   ansible.builtin.command:
