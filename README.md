@@ -1,6 +1,6 @@
 # jetson-slurm-k8-hpc-demo
 
-Ansible automation for provisioning NVIDIA Jetson devices for local inference using Kubernetes or as SLURM nodes for model fine-tuning.
+Ansible automation for provisioning NVIDIA Jetson devices for local inference using Kubernetes (k3), vLLM, and an nginx proxy.
 
 ## Prerequisites
 
@@ -48,3 +48,16 @@ ansible-playbook jetson.yaml -b -K
 - Upgrades all installed packages
 - Installs the full NVIDIA JetPack meta-package
 - Reboots the device if JetPack or system packages were updated
+
+# Set the HF token
+  kubectl create secret generic hf-token --from-literal=token=hf_xxxx
+
+# Test
+
+  curl -k https://jetson1/v1/chat/completions \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "model": "Qwen/Qwen2.5-1.5B-Instruct-AWQ",
+      "messages": [{"role": "user", "content": "What is 2+2?"}],
+      "max_tokens": 100
+    }'

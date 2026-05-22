@@ -5,13 +5,12 @@
     - name: Update apt package index
       ansible.builtin.apt:
         update_cache: true
-        cache_valid_time: 3600
- 
+
     - name: Upgrade all installed packages
       ansible.builtin.apt:
         upgrade: dist
       notify: Reboot Jetson
- 
+
     - name: Install the full NVIDIA JetPack meta-package
       ansible.builtin.apt:
         name: nvidia-jetpack
@@ -22,3 +21,189 @@
       ansible.builtin.reboot:
         msg: "Rebooting after JetPack / system update"
         reboot_timeout: 600
+
+- name: Install k3s
+  hosts: jetsons
+  vars:
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  handlers:
+    - name: Restart k3s
+      ansible.builtin.systemd:
+        name: k3s
+        state: restarted
+  tasks:
+    - name: Create k3s config directory
+      ansible.builtin.file:
+        path: /etc/rancher/k3s
+        state: directory
+        mode: '0755'
+
+    - name: Configure k3s
+      ansible.builtin.copy:
+        dest: /etc/rancher/k3s/config.yaml
+        mode: '0644'
+        content: |
+          write-kubeconfig-mode: "644"
+          disable:
+            - traefik
+            - servicelb
+      notify: Restart k3s
+
+    - name: Download k3s install script
+      ansible.builtin.get_url:
+        url: https://get.k3s.io
+        dest: /tmp/k3s-install.sh
+        mode: '0755'
+
+    - name: Install k3s server
+      ansible.builtin.command:
+        cmd: /tmp/k3s-install.sh server
+        creates: /usr/local/bin/k3s
+
+    - name: Create .kube directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/.kube"
+        state: directory
+        mode: '0700'
+
+    - name: Copy kubeconfig to ~/.kube/config
+      ansible.builtin.copy:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: "{{ ansible_facts['env']['HOME'] }}/.kube/config"
+        remote_src: true
+        owner: "{{ ansible_facts['user_id'] }}"
+        group: "{{ ansible_facts['user_id'] }}"
+        mode: '0600'
+
+    - name: Export KUBECONFIG for all users
+      ansible.builtin.copy:
+        dest: /etc/profile.d/k3s.sh
+        mode: '0644'
+        content: |
+          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+    - name: Wait for k3s node to be Ready
+      ansible.builtin.command:
+        cmd: kubectl get nodes --no-headers
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      register: node_status
+      until: "'Ready' in node_status.stdout"
+      retries: 30
+      delay: 10
+      changed_when: false
+
+- name: Configure GPU runtime
+  hosts: jetsons
+  vars:
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  tasks:
+    - name: Copy manifests to Jetson
+      ansible.builtin.copy:
+        src: manifests/
+        dest: /tmp/k3s-manifests/
+        mode: '0644'
+
+    - name: Apply nvidia RuntimeClass
+      ansible.builtin.command:
+        cmd: kubectl apply -f /tmp/k3s-manifests/nvidia-runtimeclass.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      register: rc_result
+      changed_when: "'created' in rc_result.stdout or 'configured' in rc_result.stdout"
+
+    - name: Apply nvidia device plugin
+      ansible.builtin.command:
+        cmd: kubectl apply -f /tmp/k3s-manifests/nvidia-device-plugin.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      register: dp_result
+      changed_when: "'created' in dp_result.stdout or 'configured' in dp_result.stdout"
+
+    - name: Wait for device plugin to be ready
+      ansible.builtin.command:
+        cmd: kubectl rollout status daemonset/nvidia-device-plugin-daemonset -n kube-system --timeout=300s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: false
+
+    - name: Verify GPU is schedulable
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - get
+          - node
+          - -o
+          - jsonpath={.items[0].status.allocatable.nvidia\.com/gpu}
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      register: gpu_allocatable
+      until: gpu_allocatable.stdout | int >= 1
+      retries: 18
+      delay: 10
+      changed_when: false
+
+- name: Configure TLS
+  hosts: jetsons
+  vars:
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  tasks:
+    - name: Generate self-signed TLS certificate
+      ansible.builtin.command:
+        cmd: >
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048
+          -keyout /tmp/llm-tls.key
+          -out /tmp/llm-tls.crt
+          -subj "/CN=jetson-llm/O=local"
+          -addext "subjectAltName=IP:{{ ansible_facts['default_ipv4']['address'] }}"
+        creates: /tmp/llm-tls.crt
+
+    - name: Create TLS secret
+      ansible.builtin.shell:
+        cmd: >
+          kubectl create secret tls llm-tls
+          --cert=/tmp/llm-tls.crt
+          --key=/tmp/llm-tls.key
+          --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      changed_when: true
+
+    - name: Copy manifests to Jetson
+      ansible.builtin.copy:
+        src: manifests/
+        dest: /tmp/k3s-manifests/
+        mode: '0644'
+
+    - name: Apply TLS proxy
+      ansible.builtin.command:
+        cmd: kubectl apply -f /tmp/k3s-manifests/llm-tls-proxy.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      register: tls_result
+      changed_when: "'created' in tls_result.stdout or 'configured' in tls_result.stdout"
+
+- name: Deploy LLM
+  hosts: jetsons
+  vars:
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    hf_token: ""
+  tasks:
+    - name: Create Hugging Face token secret
+      ansible.builtin.shell:
+        cmd: >
+          kubectl create secret generic hf-token
+          --from-literal=token={{ hf_token }}
+          --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      when: hf_token | length > 0
+      changed_when: true
+
+    - name: Apply LLM deployment
+      ansible.builtin.command:
+        cmd: kubectl apply -f /tmp/k3s-manifests/llm-deploy.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      register: llm_result
+      changed_when: "'created' in llm_result.stdout or 'configured' in llm_result.stdout"

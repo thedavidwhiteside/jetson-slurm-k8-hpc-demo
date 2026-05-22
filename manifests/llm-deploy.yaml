@@ -1,0 +1,74 @@
+# Llama 3.2 1B via NVIDIA-AI-IoT vLLM container (arm64/Jetson-native).
+# Requires hf-token secret — run: ansible-playbook jetson.yaml -e hf_token=hf_xxx
+# Or swap the model arg for a permissive model (e.g. Qwen/Qwen2.5-1.5B) to skip auth.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: llm
+  template:
+    metadata:
+      labels:
+        app: llm
+    spec:
+      runtimeClassName: nvidia
+      containers:
+        - name: vllm
+          image: ghcr.io/nvidia-ai-iot/vllm:latest-jetson-orin
+          command: ["python", "-m", "vllm.entrypoints.openai.api_server"]
+          args:
+            - "--model"
+            - "Qwen/Qwen2.5-1.5B-Instruct-AWQ"
+            - "--quantization"
+            - "awq"
+            - "--dtype"
+            - "auto"
+            - "--gpu-memory-utilization"
+            - "0.5"
+            - "--enforce-eager"
+            - "--max-model-len"
+            - "4096"
+            - "--max-num-batched-tokens"
+            - "1024"
+            - "--max-num-seqs"
+            - "1"
+          env:
+            - name: PYTORCH_NVML_BASED_CUDA_CHECK
+              value: "0"
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: token
+          ports:
+            - containerPort: 8000
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 4Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm
+spec:
+  selector:
+    app: llm
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
