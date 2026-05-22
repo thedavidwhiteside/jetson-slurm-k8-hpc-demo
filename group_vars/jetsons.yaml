@@ -1,0 +1,4 @@
+---
+kubeconfig: /etc/rancher/k3s/k3s.yaml
+manifests_dest: /tmp/k3s-manifests
+hf_token: ""

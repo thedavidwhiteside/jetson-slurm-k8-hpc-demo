@@ -1,0 +1,5 @@
+---
+- name: Reboot Jetson
+  ansible.builtin.reboot:
+    msg: "Rebooting after JetPack / system update"
+    reboot_timeout: 600

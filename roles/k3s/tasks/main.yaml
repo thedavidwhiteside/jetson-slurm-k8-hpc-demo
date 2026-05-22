@@ -1,0 +1,72 @@
+---
+- name: Create k3s config directory
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: '0755'
+
+- name: Configure k3s
+  ansible.builtin.copy:
+    dest: /etc/rancher/k3s/config.yaml
+    mode: '0644'
+    content: |
+      write-kubeconfig-mode: "644"
+      disable:
+        - traefik
+        - servicelb
+  notify: Restart k3s
+
+- name: Download k3s install script
+  ansible.builtin.get_url:
+    url: "{{ k3s_install_url }}"
+    dest: "{{ k3s_install_script }}"
+    mode: '0755'
+
+- name: Install k3s server
+  ansible.builtin.command:
+    cmd: "{{ k3s_install_script }} server"
+    creates: /usr/local/bin/k3s
+
+- name: Create .kube directory
+  ansible.builtin.file:
+    path: "{{ ansible_facts['env']['HOME'] }}/.kube"
+    state: directory
+    mode: '0700'
+
+- name: Copy kubeconfig to ~/.kube/config
+  ansible.builtin.copy:
+    src: "{{ kubeconfig }}"
+    dest: "{{ ansible_facts['env']['HOME'] }}/.kube/config"
+    remote_src: true
+    owner: "{{ ansible_facts['user_id'] }}"
+    group: "{{ ansible_facts['user_id'] }}"
+    mode: '0600'
+
+- name: Export KUBECONFIG for all users
+  ansible.builtin.copy:
+    dest: /etc/profile.d/k3s.sh
+    mode: '0644'
+    content: |
+      export KUBECONFIG={{ kubeconfig }}
+
+- name: Wait for k3s node to be Ready
+  ansible.builtin.command:
+    cmd: kubectl get nodes --no-headers
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: node_status
+  until: "'Ready' in node_status.stdout"
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Copy manifests to Jetson
+  ansible.builtin.copy:
+    src: manifests/
+    dest: "{{ manifests_dest }}/"
+    mode: '0644'
+  register: manifests_copy
+
+- name: Expose manifest copy result as a host fact
+  ansible.builtin.set_fact:
+    manifests_changed: "{{ manifests_copy.changed }}"

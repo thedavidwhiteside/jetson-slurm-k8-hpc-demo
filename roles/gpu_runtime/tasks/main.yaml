@@ -1,0 +1,41 @@
+---
+- name: Apply nvidia RuntimeClass
+  ansible.builtin.command:
+    cmd: kubectl apply -f {{ manifests_dest }}/nvidia-runtimeclass.yaml
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: rc_result
+  changed_when: "'created' in rc_result.stdout or 'configured' in rc_result.stdout"
+  when: manifests_changed | default(true)
+
+- name: Apply nvidia device plugin
+  ansible.builtin.command:
+    cmd: kubectl apply -f {{ manifests_dest }}/nvidia-device-plugin.yaml
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: dp_result
+  changed_when: "'created' in dp_result.stdout or 'configured' in dp_result.stdout"
+  when: manifests_changed | default(true)
+
+- name: Wait for device plugin to be ready
+  ansible.builtin.command:
+    cmd: kubectl rollout status daemonset/nvidia-device-plugin-daemonset -n kube-system --timeout=300s
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  changed_when: false
+
+- name: Verify GPU is schedulable
+  ansible.builtin.command:
+    argv:
+      - kubectl
+      - get
+      - node
+      - -o
+      - jsonpath={.items[0].status.allocatable.nvidia\.com/gpu}
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: gpu_allocatable
+  until: gpu_allocatable.stdout | int >= 1
+  retries: 18
+  delay: 10
+  changed_when: false

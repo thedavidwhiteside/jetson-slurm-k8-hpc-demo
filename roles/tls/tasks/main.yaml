@@ -1,0 +1,30 @@
+---
+- name: Generate self-signed TLS certificate
+  ansible.builtin.command:
+    cmd: >
+      openssl req -x509 -nodes -days 365 -newkey rsa:2048
+      -keyout /tmp/llm-tls.key
+      -out /tmp/llm-tls.crt
+      -subj "/CN=jetson-llm/O=local"
+      -addext "subjectAltName=IP:{{ ansible_facts['default_ipv4']['address'] }}"
+    creates: /tmp/llm-tls.crt
+
+- name: Create TLS secret
+  ansible.builtin.shell:
+    cmd: >
+      kubectl create secret tls llm-tls
+      --cert=/tmp/llm-tls.crt
+      --key=/tmp/llm-tls.key
+      --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  changed_when: true
+
+- name: Apply TLS proxy
+  ansible.builtin.command:
+    cmd: kubectl apply -f {{ manifests_dest }}/llm-tls-proxy.yaml
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: tls_result
+  changed_when: "'created' in tls_result.stdout or 'configured' in tls_result.stdout"
+  when: manifests_changed | default(true)
