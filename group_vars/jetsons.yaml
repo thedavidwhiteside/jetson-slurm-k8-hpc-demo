@@ -2,3 +2,8 @@
 kubeconfig: /etc/rancher/k3s/k3s.yaml
 manifests_dest: /tmp/k3s-manifests
 hf_token: ""
+
+# Slurm compute node resources (Jetson Orin Nano)
+slurm_cpus: 6
+slurm_real_memory: 7500
+slurm_gpus: 1
