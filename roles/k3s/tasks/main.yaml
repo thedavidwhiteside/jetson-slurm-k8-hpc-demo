@@ -1,4 +1,11 @@
 ---
+- name: Stop and disable slurmd if running
+  ansible.builtin.systemd:
+    name: slurmd
+    state: stopped
+    enabled: false
+  failed_when: false
+
 - name: Create k3s config directory
   ansible.builtin.file:
     path: /etc/rancher/k3s
@@ -48,6 +55,12 @@
     mode: '0644'
     content: |
       export KUBECONFIG={{ kubeconfig }}
+
+- name: Enable and start k3s
+  ansible.builtin.systemd:
+    name: k3s
+    state: started
+    enabled: true
 
 - name: Wait for k3s node to be Ready
   ansible.builtin.command:
