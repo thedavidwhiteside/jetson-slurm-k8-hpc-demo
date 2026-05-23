@@ -1,0 +1,23 @@
+Bootstrap: docker
+From: nvcr.io/nvidia/l4t-ml:r36.2.0-py3
+
+# NVIDIA L4T ML base already includes ONNX Runtime, PyTorch, numpy, and Pillow
+# built for Jetson (aarch64 + CUDA). We only need to add mlcommons loadgen.
+
+%post
+    pip3 install --no-cache-dir mlcommons-loadgen || (
+        echo "pip install failed — building loadgen from source" &&
+        apt-get update -qq &&
+        apt-get install -y --no-install-recommends git python3-pybind11 &&
+        git clone --depth 1 https://github.com/mlcommons/inference /tmp/inference &&
+        cd /tmp/inference/loadgen &&
+        pip3 install . &&
+        rm -rf /tmp/inference
+    )
+
+%environment
+    export PYTHONPATH=/usr/local/lib/python3/dist-packages:$PYTHONPATH
+
+%labels
+    Description MLPerf ResNet50 inference container for Jetson (aarch64)
+    JetPack     6.x (r36.2.0)

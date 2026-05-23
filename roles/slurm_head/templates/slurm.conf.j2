@@ -1,0 +1,64 @@
+# {{ ansible_managed }}
+
+ClusterName={{ slurm_cluster_name }}
+SlurmctldHost={{ hostvars[groups['head'][0]]['ansible_hostname'] }}
+
+# Authentication
+AuthType=auth/munge
+
+# Ports
+SlurmctldPort=6817
+SlurmdPort=6818
+
+# PID files
+SlurmctldPidFile=/run/slurmctld.pid
+SlurmdPidFile=/run/slurmd.pid
+
+# Directories
+StateSaveLocation=/var/spool/slurmctld
+SlurmdSpoolDir=/var/spool/slurmd
+
+# Logging
+SlurmctldLogFile=/var/log/slurm/slurmctld.log
+SlurmdLogFile=/var/log/slurm/slurmd.log
+SlurmctldDebug=info
+SlurmdDebug=info
+
+# Users
+SlurmUser=slurm
+
+# Scheduling
+SchedulerType=sched/backfill
+SelectType=select/cons_tres
+SelectTypeParameters=CR_Core_Memory
+
+# Process tracking
+ProctrackType=proctrack/linuxproc
+TaskPlugin=task/affinity
+
+# MPI
+MpiDefault=none
+
+# Accounting
+AccountingStorageType=accounting_storage/slurmdbd
+AccountingStorageHost={{ hostvars[groups['head'][0]]['ansible_hostname'] }}
+AccountingStoragePort=6819
+JobCompType=jobcomp/none
+JobAcctGatherType=jobacct_gather/linux
+JobAcctGatherFrequency=30
+
+# Fault tolerance
+ReturnToService=1
+
+{% if slurm_enable_gpu %}
+# GPU Resources
+GresTypes=gpu
+{% endif %}
+
+# Compute Nodes
+{% for host in groups['jetsons'] %}
+NodeName={{ hostvars[host]['ansible_hostname'] }} CPUs={{ hostvars[host]['slurm_cpus'] | default(slurm_cpus) }} Sockets={{ hostvars[host]['slurm_sockets'] | default(slurm_sockets) }} CoresPerSocket={{ hostvars[host]['slurm_cores_per_socket'] | default(slurm_cores_per_socket) }} ThreadsPerCore={{ hostvars[host]['slurm_threads_per_core'] | default(slurm_threads_per_core) }} RealMemory={{ hostvars[host]['slurm_real_memory'] | default(slurm_real_memory) }}{% if slurm_enable_gpu %} Gres=gpu:{{ hostvars[host]['slurm_gpus'] | default(slurm_gpus) }}{% endif %} State=UNKNOWN
+{% endfor %}
+
+# Partitions
+PartitionName={{ slurm_partition_name }} Nodes={{ groups['jetsons'] | map('extract', hostvars, 'ansible_hostname') | join(',') }} Default=YES MaxTime=INFINITE State=UP

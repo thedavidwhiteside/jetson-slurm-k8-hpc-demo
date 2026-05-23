@@ -1,0 +1,18 @@
+---
+- name: Reboot required
+  ansible.builtin.debug:
+    msg: "Reboot jetson nodes for cgroup v1 kernel parameter to take effect"
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart munge
+  ansible.builtin.systemd:
+    name: munge
+    state: restarted
+
+- name: Restart slurmd
+  ansible.builtin.systemd:
+    name: slurmd
+    state: restarted

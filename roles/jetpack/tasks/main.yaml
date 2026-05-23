@@ -3,11 +3,6 @@
   ansible.builtin.apt:
     update_cache: true
 
-- name: Upgrade all installed packages
-  ansible.builtin.apt:
-    upgrade: dist
-  notify: Reboot Jetson
-
 - name: Install the full NVIDIA JetPack meta-package
   ansible.builtin.apt:
     name: nvidia-jetpack

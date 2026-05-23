@@ -1,0 +1,121 @@
+---
+- name: Update apt package index
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Install munge, slurmctld, slurmdbd, and MariaDB
+  ansible.builtin.apt:
+    name:
+      - munge
+      - slurmctld
+      - slurmdbd
+      - mariadb-server
+      - python3-pymysql
+    state: present
+    update_cache: true
+
+- name: Enable and start MariaDB
+  ansible.builtin.systemd:
+    name: mariadb
+    state: started
+    enabled: true
+
+- name: Create slurm accounting database
+  community.mysql.mysql_db:
+    name: "{{ slurmdbd_db_name }}"
+    state: present
+    login_unix_socket: /run/mysqld/mysqld.sock
+
+- name: Create slurm database user
+  community.mysql.mysql_user:
+    name: "{{ slurmdbd_db_user }}"
+    password: "{{ slurmdbd_db_password }}"
+    priv: "{{ slurmdbd_db_name }}.*:ALL"
+    host: localhost
+    state: present
+    login_unix_socket: /run/mysqld/mysqld.sock
+
+- name: Create slurmctld state directory
+  ansible.builtin.file:
+    path: /var/spool/slurmctld
+    state: directory
+    owner: slurm
+    group: slurm
+    mode: '0755'
+
+- name: Create slurm log directory
+  ansible.builtin.file:
+    path: /var/log/slurm
+    state: directory
+    owner: slurm
+    group: slurm
+    mode: '0755'
+
+- name: Generate munge key if not present
+  ansible.builtin.command:
+    cmd: dd if=/dev/urandom bs=1 count=1024 of=/etc/munge/munge.key
+    creates: /etc/munge/munge.key
+  notify: Restart munge
+
+- name: Set munge key permissions
+  ansible.builtin.file:
+    path: /etc/munge/munge.key
+    owner: munge
+    group: munge
+    mode: '0400'
+
+- name: Configure slurmdbd.conf
+  ansible.builtin.template:
+    src: slurmdbd.conf.j2
+    dest: /etc/slurm/slurmdbd.conf
+    owner: slurm
+    group: slurm
+    mode: '0600'
+  notify: Restart slurmdbd
+
+- name: Configure slurm.conf
+  ansible.builtin.template:
+    src: slurm.conf.j2
+    dest: /etc/slurm/slurm.conf
+    owner: slurm
+    group: slurm
+    mode: '0644'
+  notify: Restart slurmctld
+
+- name: Enable and start munge
+  ansible.builtin.systemd:
+    name: munge
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Enable and start slurmdbd
+  ansible.builtin.systemd:
+    name: slurmdbd
+    state: started
+    enabled: true
+
+- name: Wait for slurmdbd to be ready on port 6819
+  ansible.builtin.wait_for:
+    port: 6819
+    host: 127.0.0.1
+    timeout: 60
+
+- name: Enable and start slurmctld
+  ansible.builtin.systemd:
+    name: slurmctld
+    state: started
+    enabled: true
+
+- name: Fetch munge key to Ansible controller for distribution
+  ansible.builtin.fetch:
+    src: /etc/munge/munge.key
+    dest: /tmp/slurm-munge.key
+    flat: true
+
+- name: Restrict munge key permissions on Ansible controller
+  ansible.builtin.file:
+    path: /tmp/slurm-munge.key
+    mode: '0400'
+  delegate_to: localhost
+  become: false

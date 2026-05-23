@@ -1,0 +1,4 @@
+---
+slurm_cluster_name: jetson-hpc
+slurm_partition_name: gpu
+slurm_enable_gpu: true

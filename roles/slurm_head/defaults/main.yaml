@@ -1,0 +1,5 @@
+---
+slurmdbd_db_host: localhost
+slurmdbd_db_name: slurm_acct_db
+slurmdbd_db_user: slurm
+slurmdbd_db_password: slurm

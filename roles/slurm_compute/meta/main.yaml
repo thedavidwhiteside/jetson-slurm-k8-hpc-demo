@@ -1,0 +1,6 @@
+---
+galaxy_info:
+  role_name: slurm_compute
+  description: Stop k3s and configure Slurm compute node (slurmd) on Jetson
+  min_ansible_version: "2.9"
+dependencies: []

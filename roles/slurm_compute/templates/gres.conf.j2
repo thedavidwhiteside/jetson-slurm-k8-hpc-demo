@@ -1,0 +1,4 @@
+# {{ ansible_managed }}
+# Jetson integrated GPU uses /dev/nvhost-gpu (not /dev/nvidia0)
+AutoDetect=off
+Name=gpu File=/dev/nvhost-gpu Count={{ slurm_gpus | default(1) }}

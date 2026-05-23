@@ -1,0 +1,17 @@
+---
+- name: Gather facts from all nodes before configuring
+  hosts: all
+  become: true
+  gather_facts: true
+
+- name: Configure Slurm head node
+  hosts: head
+  become: true
+  roles:
+    - slurm_head
+
+- name: Stop k3s and configure Jetsons as Slurm compute nodes
+  hosts: jetsons
+  become: true
+  roles:
+    - slurm_compute

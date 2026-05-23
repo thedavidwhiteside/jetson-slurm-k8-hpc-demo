@@ -1,2 +1,8 @@
 *.retry
 .ansible/
+/tmp/slurm-munge.key
+*.vault
+group_vars/vault.yaml
+mlperf/models/
+mlperf/logs/
+mlperf/*.sif
