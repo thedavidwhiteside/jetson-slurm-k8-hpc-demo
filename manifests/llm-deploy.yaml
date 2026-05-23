@@ -1,5 +1,5 @@
 # Llama 3.2 1B via NVIDIA-AI-IoT vLLM container (arm64/Jetson-native).
-# Requires hf-token secret — run: ansible-playbook jetson.yaml -e hf_token=hf_xxx
+# Requires hf-token secret — run: ansible-playbook jetson-kubernetes.yaml -e hf_token=hf_xxx
 # Or swap the model arg for a permissive model (e.g. Qwen/Qwen2.5-1.5B) to skip auth.
 apiVersion: apps/v1
 kind: Deployment

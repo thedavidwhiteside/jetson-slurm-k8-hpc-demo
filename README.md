@@ -39,7 +39,7 @@ login1
 ## Usage
 
 ```bash
-ansible-playbook jetson.yaml -b -K
+ansible-playbook jetson-kubernetes.yaml -b -K
 ```
 
 ## What it does
