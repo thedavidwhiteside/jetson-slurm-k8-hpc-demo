@@ -31,7 +31,7 @@ spec:
             - "--dtype"
             - "auto"
             - "--gpu-memory-utilization"
-            - "0.5"
+            - "0.3"
             - "--enforce-eager"
             - "--max-model-len"
             - "4096"

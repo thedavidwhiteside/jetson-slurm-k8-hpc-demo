@@ -12,7 +12,7 @@
 
 - name: Apply LLM deployment
   ansible.builtin.command:
-    cmd: kubectl apply -f {{ manifests_dest }}/llm-deploy.yaml
+    cmd: kubectl apply -f {{ manifests_dest }}/llm-deploy.yaml && kubectl rollout restart deployment/llm
   environment:
     KUBECONFIG: "{{ kubeconfig }}"
   register: llm_result
