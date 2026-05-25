@@ -66,6 +66,17 @@
         mode: '0644'
       notify: Reload systemd
 
+- name: Add Apptainer PPA
+  ansible.builtin.apt_repository:
+    repo: ppa:apptainer/ppa
+    state: present
+
+- name: Install Apptainer
+  ansible.builtin.apt:
+    name: apptainer
+    state: present
+    update_cache: true
+
 - name: Create slurmd spool directory
   ansible.builtin.file:
     path: /var/spool/slurmd
